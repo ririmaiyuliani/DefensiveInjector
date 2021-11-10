@@ -17,14 +17,13 @@ typedef void (WINAPI * LdrLoadDll_) (PWSTR SearchPath OPTIONAL,
 LPVOID lpAddr;
 CHAR OriginalBytes[13] = {};
 
- typedef struct _INITIAL_TEB
- {
-     PVOID PreviousStackBase;
-     PVOID PreviousStackLimit;
-     PVOID StackBase;
-     PVOID StackLimit;
-     PVOID AllocatedStackBase;
- } INITIAL_TEB, *PINITIAL_TEB;
+typedef struct _INITIAL_TEB {
+    PVOID PreviousStackBase;
+    PVOID PreviousStackLimit;
+    PVOID StackBase;
+    PVOID StackLimit;
+    PVOID AllocatedStackBase;
+} INITIAL_TEB, *PINITIAL_TEB;
 
 typedef BOOL (WINAPI * CryptDestroyKey_)      (HCRYPTKEY hKey);
 typedef BOOL (WINAPI * CryptDestroyHash_)     (HCRYPTHASH hHash);
